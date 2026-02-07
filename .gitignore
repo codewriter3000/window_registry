@@ -1,0 +1,89 @@
+# =========================
+# Rust / Cargo
+# =========================
+
+# Compiled artifacts
+/target/
+
+# Cargo.lock
+# - Keep for binaries
+# - Ignore for libraries (uncomment if this is a library crate)
+# Cargo.lock
+
+# Rustfmt backup files
+*.rs.bk
+
+# =========================
+# IDEs / Editors
+# =========================
+
+# VS Code
+.vscode/
+
+# IntelliJ / CLion
+.idea/
+*.iml
+
+# Vim
+*.swp
+*.swo
+*.swn
+*~
+
+# Emacs
+\#*\#
+.\#*
+
+# =========================
+# OS files
+# =========================
+
+# macOS
+.DS_Store
+
+# Linux
+*.log
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# =========================
+# Build / tooling
+# =========================
+
+# Rust analyzer cache
+.rust-analyzer/
+
+# LLVM / bindgen output (if you add bindgen later)
+bindings.rs
+
+# C / FFI temporary files
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+
+# =========================
+# Tests / Coverage
+# =========================
+
+# Tarpaulin / coverage
+tarpaulin-report.html
+coverage/
+*.profraw
+*.profdata
+
+# =========================
+# Misc
+# =========================
+
+# Environment variables
+.env
+.env.*
+
+# Temporary files
+tmp/
+temp/
+
