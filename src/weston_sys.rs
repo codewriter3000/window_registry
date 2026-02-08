@@ -1,5 +1,3 @@
-use libc::{c_char, c_int};
-
 #[repr(C)]
 pub struct weston_surface {
     _private: [u8; 0],

@@ -6,8 +6,6 @@ use window_registry::{
     weston_surface
 };
 
-use std::ptr::NonNull;
-
 #[test]
 fn generation_prevents_stale_ids() {
     let mut r = Registry::new();
