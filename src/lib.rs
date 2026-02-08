@@ -8,6 +8,8 @@ mod registry;
 mod events;
 mod error;
 mod shared;
+mod handles;
+mod weston;
 
 // Public re-exports
 pub use ids::{WindowId, DesktopKey, SurfaceKey};
@@ -16,3 +18,5 @@ pub use registry::{Slot, Registry};
 pub use events::RegistryEvent;
 pub use error::RegistryError;
 pub use shared::SharedRegistry;
+pub use handles::CompositorHandles;
+pub use weston::on_new_desktop_surface;

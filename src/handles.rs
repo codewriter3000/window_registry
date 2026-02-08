@@ -6,6 +6,10 @@ pub struct CompositorHandles {
 }
 
 impl CompositorHandles {
+    pub fn new() -> Self {
+        Self { views: HashMap::new() }
+    }
+
     pub fn set_view(&mut self, id: WindowId, view: *mut weston_view) {
         let nn = NonNull::new(view).expect("weston_view ptr was null");
         self.views.insert(id, nn);
