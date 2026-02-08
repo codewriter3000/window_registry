@@ -105,3 +105,17 @@ fn shared_registry_event_ordering_multiple_windows() {
         Some(RegistryEvent::WindowDestroyed { id }) if *id == id_a
     ));
 }
+
+#[test]
+fn shared_registry_reverse_lookup_from_surface() {
+    let reg = SharedRegistry::new(Registry::new());
+    let p = TestPtrs::new();
+
+    let (dk, sk) = unsafe { p.keys() };
+    let id = reg
+        .insert_window_with(dk, sk, |_| {})
+        .expect("insert_window_with should succeed");
+
+    assert_eq!(reg.from_surface(sk), Some(id));
+    assert_eq!(reg.from_desktop(dk), Some(id));
+}

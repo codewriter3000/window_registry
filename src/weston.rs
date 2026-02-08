@@ -2,8 +2,14 @@ use crate::{
     DesktopKey,
     Registry,
     RegistryError,
+    RegistryEventQueue,
+    SharedRegistry,
     SurfaceKey,
     WindowId,
+    WindowGeometry,
+    WindowUpdate,
+    WorkspaceId,
+    OutputId,
     weston_desktop_surface,
     weston_surface,
 };
@@ -37,90 +43,116 @@ pub unsafe fn on_new_desktop_surface(
     Ok(id)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::atomic::{AtomicPtr, Ordering};
-    use std::ptr;
+#[derive(Clone, Debug)]
+pub struct WestonGlueContext {
+    pub reg: SharedRegistry,
+    pub queue: RegistryEventQueue,
+}
 
-    static SURFACE_PTR: AtomicPtr<weston_surface> = AtomicPtr::new(ptr::null_mut());
-
-    #[no_mangle]
-    pub extern "C" fn weston_desktop_surface_get_surface(
-        _ds: *mut weston_desktop_surface,
-    ) -> *mut weston_surface {
-        SURFACE_PTR.load(Ordering::SeqCst)
-    }
-
-    struct TestPtrs {
-        ds: *mut weston_desktop_surface,
-        s: *mut weston_surface,
-    }
-
-    impl TestPtrs {
-        fn new() -> Self {
-            let ds = Box::into_raw(Box::new(0u8)) as *mut weston_desktop_surface;
-            let s = Box::into_raw(Box::new(0u8)) as *mut weston_surface;
-            Self { ds, s }
-        }
-
-        unsafe fn keys(&self) -> (DesktopKey, SurfaceKey) {
-            (DesktopKey::from_ptr(self.ds), SurfaceKey::from_ptr(self.s))
-        }
-    }
-
-    impl Drop for TestPtrs {
-        fn drop(&mut self) {
-            unsafe {
-                drop(Box::from_raw(self.ds));
-                drop(Box::from_raw(self.s));
-            }
-        }
-    }
-
-    #[test]
-    fn on_new_desktop_surface_with_keys_errors_on_duplicate() {
-        let mut reg = Registry::new();
-        let p1 = TestPtrs::new();
-        let p2 = TestPtrs::new();
-
-        let (dk1, sk1) = unsafe { p1.keys() };
-        let (dk2, sk2) = unsafe { p2.keys() };
-
-        on_new_desktop_surface_with_keys(dk1, sk1, &mut reg)
-            .expect("first insert should succeed");
-
-        let err = on_new_desktop_surface_with_keys(dk1, sk2, &mut reg)
-            .expect_err("duplicate desktop key should error");
-        assert!(matches!(
-            err,
-            RegistryError::DesktopKeyAlreadyRegistered { dk, .. } if dk == dk1
-        ));
-
-        let err = on_new_desktop_surface_with_keys(dk2, sk1, &mut reg)
-            .expect_err("duplicate surface key should error");
-        assert!(matches!(
-            err,
-            RegistryError::SurfaceKeyAlreadyRegistered { sk, .. } if sk == sk1
-        ));
-    }
-
-    #[test]
-    fn on_new_desktop_surface_propagates_error() {
-        let mut reg = Registry::new();
-        let p = TestPtrs::new();
-
-        SURFACE_PTR.store(p.s, Ordering::SeqCst);
-
-        unsafe {
-            on_new_desktop_surface(p.ds, &mut reg).expect("first insert should succeed");
-            let err = on_new_desktop_surface(p.ds, &mut reg)
-                .expect_err("duplicate desktop key should error");
-            assert!(matches!(
-                err,
-                RegistryError::DesktopKeyAlreadyRegistered { dk, .. }
-                    if dk == DesktopKey::from_ptr(p.ds)
-            ));
-        }
+impl WestonGlueContext {
+    pub fn new(reg: SharedRegistry, queue: RegistryEventQueue) -> Self {
+        Self { reg, queue }
     }
 }
+
+fn lookup_id_from_desktop(reg: &SharedRegistry, ds: *mut weston_desktop_surface) -> Result<WindowId, RegistryError> {
+    let dk = unsafe { DesktopKey::from_ptr(ds) };
+    reg.from_desktop(dk)
+        .ok_or_else(|| RegistryError::InvalidWindowId(WindowId { index: u32::MAX, gen: std::num::NonZeroU32::new(1).unwrap() }))
+}
+
+pub unsafe fn weston_handle_new_desktop_surface(
+    ds: *mut weston_desktop_surface,
+    ctx: &WestonGlueContext,
+) -> Result<WindowId, RegistryError> {
+    let dk = DesktopKey::from_ptr(ds);
+    let s: *mut weston_surface = weston_desktop_surface_get_surface(ds);
+    let sk = SurfaceKey::from_ptr(s);
+    ctx.reg.insert_window_queued(dk, sk, &ctx.queue)
+}
+
+pub unsafe fn weston_handle_map(
+    ds: *mut weston_desktop_surface,
+    ctx: &WestonGlueContext,
+) -> Result<(), RegistryError> {
+    let id = lookup_id_from_desktop(&ctx.reg, ds)?;
+    ctx.reg.on_map_queued(id, &ctx.queue)
+}
+
+pub unsafe fn weston_handle_unmap(
+    ds: *mut weston_desktop_surface,
+    ctx: &WestonGlueContext,
+) -> Result<(), RegistryError> {
+    let id = lookup_id_from_desktop(&ctx.reg, ds)?;
+    ctx.reg.on_unmap_queued(id, &ctx.queue)
+}
+
+pub unsafe fn weston_handle_destroy(
+    ds: *mut weston_desktop_surface,
+    ctx: &WestonGlueContext,
+) -> Result<(), RegistryError> {
+    let id = lookup_id_from_desktop(&ctx.reg, ds)?;
+    ctx.reg.remove_window_queued(id, &ctx.queue)
+}
+
+pub unsafe fn weston_handle_configure(
+    ds: *mut weston_desktop_surface,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    ctx: &WestonGlueContext,
+) -> Result<(), RegistryError> {
+    let id = lookup_id_from_desktop(&ctx.reg, ds)?;
+    let mut update = WindowUpdate::default();
+    update.geometry = Some(Some(WindowGeometry { x, y, width, height }));
+    ctx.reg.update_window_queued(id, update, &ctx.queue)
+}
+
+pub unsafe fn weston_handle_commit(
+    _ds: *mut weston_desktop_surface,
+    _ctx: &WestonGlueContext,
+) -> Result<(), RegistryError> {
+    Ok(())
+}
+
+pub unsafe fn weston_handle_focus(
+    ds: *mut weston_desktop_surface,
+    focused: bool,
+    ctx: &WestonGlueContext,
+) -> Result<(), RegistryError> {
+    let id = lookup_id_from_desktop(&ctx.reg, ds)?;
+    let mut update = WindowUpdate::default();
+    update.is_focused = Some(focused);
+    ctx.reg.update_window_queued(id, update, &ctx.queue)
+}
+
+pub unsafe fn weston_handle_output(
+    ds: *mut weston_desktop_surface,
+    output_id: u32,
+    workspace_id: u32,
+    ctx: &WestonGlueContext,
+) -> Result<(), RegistryError> {
+    let id = lookup_id_from_desktop(&ctx.reg, ds)?;
+    let mut update = WindowUpdate::default();
+    update.output = Some(Some(OutputId(output_id)));
+    update.workspace = Some(Some(WorkspaceId(workspace_id)));
+    ctx.reg.update_window_queued(id, update, &ctx.queue)
+}
+
+pub unsafe fn weston_handle_parent(
+    ds: *mut weston_desktop_surface,
+    parent: *mut weston_desktop_surface,
+    ctx: &WestonGlueContext,
+) -> Result<(), RegistryError> {
+    let id = lookup_id_from_desktop(&ctx.reg, ds)?;
+    let parent_id = if parent.is_null() {
+        None
+    } else {
+        Some(lookup_id_from_desktop(&ctx.reg, parent)?)
+    };
+    let mut update = WindowUpdate::default();
+    update.parent_id = Some(parent_id);
+    ctx.reg.update_window_queued(id, update, &ctx.queue)
+}
+

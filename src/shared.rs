@@ -26,6 +26,16 @@ impl SharedRegistry {
         r.snapshot_all()
     }
 
+    pub fn from_desktop(&self, dk: DesktopKey) -> Option<WindowId> {
+        let r = self.inner.read().expect("registry lock poisoned");
+        r.from_desktop(dk)
+    }
+
+    pub fn from_surface(&self, sk: SurfaceKey) -> Option<WindowId> {
+        let r = self.inner.read().expect("registry lock poisoned");
+        r.from_surface(sk)
+    }
+
     // WRITE + dispatch after unlock
     pub fn insert_window_with<F>(
         &self,
