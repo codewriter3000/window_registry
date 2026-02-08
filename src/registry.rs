@@ -6,7 +6,6 @@ use std::{
 };
 
 use crate::{
-    Slot,
     WindowRecord,
     WindowId,
     DesktopKey,
@@ -16,6 +15,12 @@ use crate::{
     weston_surface,
     weston_view,
 };
+
+#[derive(Debug)]
+pub struct Slot {
+    pub gen: NonZeroU32,
+    pub value: Option<WindowRecord>,
+}
 
 #[derive(Debug)]
 pub struct Registry {

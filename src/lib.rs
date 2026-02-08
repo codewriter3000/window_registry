@@ -7,6 +7,6 @@ mod model;
 mod registry;
 
 // Public re-exports
-pub use ids::{WindowId, Slot, DesktopKey, SurfaceKey};
+pub use ids::{WindowId, DesktopKey, SurfaceKey};
 pub use model::{WindowRecord};
-pub use registry::{Registry, on_new_desktop_surface};
+pub use registry::{Slot, Registry, on_new_desktop_surface};
