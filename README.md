@@ -8,7 +8,7 @@ for querying, snapshotting, and lifecycle transitions.
 
 - Stable `WindowId` values with generation counters to prevent stale reuse.
 - Reverse lookups from `DesktopKey` / `SurfaceKey` to `WindowId`.
-- Event emission for create/map/unmap/destroy + lifecycle changes.
+- Event emission for create/destroy + grouped field changes.
 - `SharedRegistry` wrapper for thread-safe use with event dispatch.
 
 ## Module Map
@@ -45,10 +45,11 @@ They are `Copy`, `Eq`, `Hash`, and include pointer values in `Debug` output.
 `RegistryEvent` variants:
 
 - `WindowCreated { id, dk, sk }`
-- `WindowMapped { id }`
-- `WindowUnmapped { id }`
+- `WindowChanged { id, changes }`
 - `WindowDestroyed { id }`
-- `LifecycleChanged { id, old, new }`
+
+`WindowChanged` uses a grouped change payload, allowing a single event to carry multiple
+field updates (e.g., lifecycle + geometry) for a window.
 
 `RegistryError` variants:
 

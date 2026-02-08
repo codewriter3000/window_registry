@@ -3,6 +3,8 @@ use window_registry::{
     Registry,
     RegistryError,
     RegistryEvent,
+    WindowChange,
+    WindowState,
 };
 
 mod common;
@@ -31,6 +33,14 @@ fn registry_insert_lookup_and_snapshot() {
     assert_eq!(snapshot.dk, dk);
     assert_eq!(snapshot.sk, sk);
     assert_eq!(snapshot.lifecycle, LifecycleState::Created);
+    assert_eq!(snapshot.geometry, None);
+    assert_eq!(snapshot.state, WindowState::default());
+    assert_eq!(snapshot.is_focused, false);
+    assert_eq!(snapshot.workspace, None);
+    assert_eq!(snapshot.output, None);
+    assert_eq!(snapshot.stack_index, 0);
+    assert_eq!(snapshot.parent_id, None);
+    assert!(snapshot.children.is_empty());
     assert_eq!(snapshot.title, None);
     assert_eq!(snapshot.app_id, None);
 
@@ -90,25 +100,25 @@ fn registry_lifecycle_transitions() {
     let (id, _events) = reg.insert_window(dk, sk).expect("insert_window should succeed");
 
     let events = reg.on_map(id).expect("on_map should succeed");
-    assert_eq!(events.len(), 2);
+    assert_eq!(events.len(), 1);
     assert!(events.iter().any(|e| matches!(
         e,
-        RegistryEvent::LifecycleChanged { id: ev_id, old, new }
-            if *ev_id == id && *old == LifecycleState::Created && *new == LifecycleState::Mapped
+        RegistryEvent::WindowChanged { id: ev_id, changes }
+            if *ev_id == id
+                && changes.lifecycle == Some(WindowChange { old: LifecycleState::Created, new: LifecycleState::Mapped })
     )));
-    assert!(events.iter().any(|e| matches!(e, RegistryEvent::WindowMapped { id: ev_id } if *ev_id == id)));
 
     let events = reg.on_map(id).expect("on_map idempotent");
     assert!(events.is_empty());
 
     let events = reg.on_unmap(id).expect("on_unmap should succeed");
-    assert_eq!(events.len(), 2);
+    assert_eq!(events.len(), 1);
     assert!(events.iter().any(|e| matches!(
         e,
-        RegistryEvent::LifecycleChanged { id: ev_id, old, new }
-            if *ev_id == id && *old == LifecycleState::Mapped && *new == LifecycleState::Unmapped
+        RegistryEvent::WindowChanged { id: ev_id, changes }
+            if *ev_id == id
+                && changes.lifecycle == Some(WindowChange { old: LifecycleState::Mapped, new: LifecycleState::Unmapped })
     )));
-    assert!(events.iter().any(|e| matches!(e, RegistryEvent::WindowUnmapped { id: ev_id } if *ev_id == id)));
 
     let events = reg.on_unmap(id).expect("on_unmap idempotent");
     assert!(events.is_empty());

@@ -1,7 +1,14 @@
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use window_registry::{LifecycleState, Registry, RegistryError, RegistryEvent, SharedRegistry};
+use window_registry::{
+    LifecycleState,
+    Registry,
+    RegistryError,
+    RegistryEvent,
+    SharedRegistry,
+    WindowChange,
+};
 
 mod common;
 use common::TestPtrs;
@@ -55,15 +62,12 @@ fn shared_registry_on_map_with_dispatches_events() {
     .expect("on_map_with should succeed");
 
     let collected = events.lock().unwrap();
-    assert_eq!(collected.len(), 2);
+    assert_eq!(collected.len(), 1);
     assert!(collected.iter().any(|e| matches!(
         e,
-        RegistryEvent::WindowMapped { id: ev_id } if *ev_id == id
-    )));
-    assert!(collected.iter().any(|e| matches!(
-        e,
-        RegistryEvent::LifecycleChanged { id: ev_id, old, new }
-            if *ev_id == id && *old == LifecycleState::Created && *new == LifecycleState::Mapped
+        RegistryEvent::WindowChanged { id: ev_id, changes }
+            if *ev_id == id
+                && changes.lifecycle == Some(WindowChange { old: LifecycleState::Created, new: LifecycleState::Mapped })
     )));
 }
 
@@ -89,15 +93,12 @@ fn shared_registry_on_unmap_with_dispatches_events() {
     .expect("on_unmap_with should succeed");
 
     let collected = events.lock().unwrap();
-    assert_eq!(collected.len(), 2);
+    assert_eq!(collected.len(), 1);
     assert!(collected.iter().any(|e| matches!(
         e,
-        RegistryEvent::WindowUnmapped { id: ev_id } if *ev_id == id
-    )));
-    assert!(collected.iter().any(|e| matches!(
-        e,
-        RegistryEvent::LifecycleChanged { id: ev_id, old, new }
-            if *ev_id == id && *old == LifecycleState::Mapped && *new == LifecycleState::Unmapped
+        RegistryEvent::WindowChanged { id: ev_id, changes }
+            if *ev_id == id
+                && changes.lifecycle == Some(WindowChange { old: LifecycleState::Mapped, new: LifecycleState::Unmapped })
     )));
 }
 

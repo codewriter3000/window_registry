@@ -63,6 +63,14 @@ pub fn assert_shared_registry_hard_invariants(reg: &SharedRegistry) {
         assert_eq!(rt.dk, w.dk, "snapshot(id) dk mismatch for {:?}", w.id);
         assert_eq!(rt.sk, w.sk, "snapshot(id) sk mismatch for {:?}", w.id);
         assert_eq!(rt.lifecycle, w.lifecycle, "snapshot(id) lifecycle mismatch for {:?}", w.id);
+        assert_eq!(rt.geometry, w.geometry, "snapshot(id) geometry mismatch for {:?}", w.id);
+        assert_eq!(rt.state, w.state, "snapshot(id) state mismatch for {:?}", w.id);
+        assert_eq!(rt.is_focused, w.is_focused, "snapshot(id) focus mismatch for {:?}", w.id);
+        assert_eq!(rt.workspace, w.workspace, "snapshot(id) workspace mismatch for {:?}", w.id);
+        assert_eq!(rt.output, w.output, "snapshot(id) output mismatch for {:?}", w.id);
+        assert_eq!(rt.stack_index, w.stack_index, "snapshot(id) stack_index mismatch for {:?}", w.id);
+        assert_eq!(rt.parent_id, w.parent_id, "snapshot(id) parent_id mismatch for {:?}", w.id);
+        assert_eq!(rt.children, w.children, "snapshot(id) children mismatch for {:?}", w.id);
         assert_eq!(rt.title, w.title, "snapshot(id) title mismatch for {:?}", w.id);
         assert_eq!(rt.app_id, w.app_id, "snapshot(id) app_id mismatch for {:?}", w.id);
     }

@@ -13,9 +13,17 @@ mod weston;
 
 // Public re-exports
 pub use ids::{WindowId, DesktopKey, SurfaceKey};
-pub use model::{WindowRecord, WindowInfo, LifecycleState};
+pub use model::{
+	LifecycleState,
+	OutputId,
+	WindowGeometry,
+	WindowInfo,
+	WindowRecord,
+	WindowState,
+	WorkspaceId,
+};
 pub use registry::{Slot, Registry};
-pub use events::RegistryEvent;
+pub use events::{RegistryEvent, WindowChange, WindowChanges};
 pub use error::RegistryError;
 pub use shared::SharedRegistry;
 pub use handles::CompositorHandles;

@@ -13,6 +13,9 @@ use crate::{
     WindowInfo,
     DesktopKey,
     SurfaceKey,
+    WindowChange,
+    WindowChanges,
+    WindowState,
 };
 
 #[derive(Debug)]
@@ -94,6 +97,14 @@ impl Registry {
             dk,
             sk,
             lifecycle: LifecycleState::Created,
+            geometry: None,
+            state: WindowState::default(),
+            is_focused: false,
+            workspace: None,
+            output: None,
+            stack_index: 0,
+            parent_id: None,
+            children: Vec::new(),
             title: None,
             app_id: None,
         };
@@ -207,8 +218,13 @@ impl Registry {
         if old != LifecycleState::Mapped {
             r.lifecycle = LifecycleState::Mapped;
             Ok(vec![
-                RegistryEvent::LifecycleChanged { id, old, new: LifecycleState::Mapped },
-                RegistryEvent::WindowMapped { id },
+                RegistryEvent::WindowChanged {
+                    id,
+                    changes: WindowChanges {
+                        lifecycle: Some(WindowChange { old, new: LifecycleState::Mapped }),
+                        ..WindowChanges::default()
+                    },
+                },
             ])
         } else {
             Ok(vec![])
@@ -221,8 +237,13 @@ impl Registry {
         if old == LifecycleState::Mapped {
             r.lifecycle = LifecycleState::Unmapped;
             Ok(vec![
-                RegistryEvent::LifecycleChanged { id, old, new: LifecycleState::Unmapped },
-                RegistryEvent::WindowUnmapped { id },
+                RegistryEvent::WindowChanged {
+                    id,
+                    changes: WindowChanges {
+                        lifecycle: Some(WindowChange { old, new: LifecycleState::Unmapped }),
+                        ..WindowChanges::default()
+                    },
+                },
             ])
         } else {
             Ok(vec![])
