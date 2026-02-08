@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::{
     Registry, RegistryEvent, RegistryError,
-    WindowId, WindowInfo, DesktopKey, SurfaceKey,
+    WindowId, WindowInfo, DesktopKey, SurfaceKey, WindowUpdate,
 };
 
 #[derive(Clone, Debug)]
@@ -83,6 +83,24 @@ impl SharedRegistry {
         let events = {
             let mut r = self.inner.write().expect("registry lock poisoned");
             r.on_unmap(id)?
+        };
+
+        dispatch(events);
+        Ok(())
+    }
+
+    pub fn update_window_with<F>(
+        &self,
+        id: WindowId,
+        update: WindowUpdate,
+        mut dispatch: F,
+    ) -> Result<(), RegistryError>
+    where
+        F: FnMut(Vec<RegistryEvent>),
+    {
+        let events = {
+            let mut r = self.inner.write().expect("registry lock poisoned");
+            r.update_window(id, update)?
         };
 
         dispatch(events);

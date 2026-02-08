@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use window_registry::{Registry, RegistryError, SharedRegistry};
+use window_registry::{Registry, RegistryError, SharedRegistry, WindowGeometry, WindowUpdate};
 
 mod common;
 use common::TestPtrs;
@@ -105,5 +105,45 @@ fn shared_registry_remove_window_error_skips_dispatch() {
     });
 
     assert!(matches!(err, Err(RegistryError::InvalidWindowId(stale)) if stale == id));
+    assert!(!called.load(Ordering::SeqCst));
+}
+
+#[test]
+fn shared_registry_update_window_error_propagates() {
+    let reg = SharedRegistry::new(Registry::new());
+    let p = TestPtrs::new();
+
+    let (dk, sk) = unsafe { p.keys() };
+    let id = reg
+        .insert_window_with(dk, sk, |_| {})
+        .expect("insert_window_with should succeed");
+
+    let mut update = WindowUpdate::default();
+    update.geometry = Some(Some(WindowGeometry { x: 0, y: 0, width: -1, height: 10 }));
+
+    let err = reg.update_window_with(id, update, |_| {});
+    assert!(matches!(err, Err(RegistryError::InvalidGeometry { id: err_id, .. }) if err_id == id));
+}
+
+#[test]
+fn shared_registry_update_window_error_skips_dispatch() {
+    let reg = SharedRegistry::new(Registry::new());
+    let p = TestPtrs::new();
+
+    let (dk, sk) = unsafe { p.keys() };
+    let id = reg
+        .insert_window_with(dk, sk, |_| {})
+        .expect("insert_window_with should succeed");
+
+    let mut update = WindowUpdate::default();
+    update.geometry = Some(Some(WindowGeometry { x: 0, y: 0, width: -1, height: 10 }));
+
+    let called = Arc::new(AtomicBool::new(false));
+    let called_flag = Arc::clone(&called);
+    let err = reg.update_window_with(id, update, move |_| {
+        called_flag.store(true, Ordering::SeqCst);
+    });
+
+    assert!(matches!(err, Err(RegistryError::InvalidGeometry { id: err_id, .. }) if err_id == id));
     assert!(!called.load(Ordering::SeqCst));
 }

@@ -1,20 +1,20 @@
 use std::{
-    num::NonZeroU32, 
     collections::HashMap,
     fmt::Debug,
+    num::NonZeroU32,
 };
 
 use crate::{
-    RegistryEvent,
-    RegistryError,
-    LifecycleState,
-    WindowRecord,
-    WindowId,
-    WindowInfo,
     DesktopKey,
+    LifecycleState,
+    RegistryError,
+    RegistryEvent,
     SurfaceKey,
     WindowChange,
     WindowChanges,
+    WindowId,
+    WindowInfo,
+    WindowRecord,
     WindowState,
 };
 
@@ -26,8 +26,8 @@ pub struct Slot {
 
 #[derive(Debug)]
 pub struct Registry {
-    slots: Vec<Slot>,
-    free: Vec<u32>,
+    pub(crate) slots: Vec<Slot>,
+    pub(crate) free: Vec<u32>,
 
     pub surface_map: HashMap<SurfaceKey, WindowId>,
     pub desktop_map: HashMap<DesktopKey, WindowId>,
@@ -35,7 +35,7 @@ pub struct Registry {
 
 impl Registry {
     pub fn new() -> Self {
-        Self { 
+        Self {
             slots: Vec::new(),
             free: Vec::new(),
             surface_map: HashMap::new(),
@@ -83,6 +83,7 @@ impl Registry {
         dk: DesktopKey,
         sk: SurfaceKey,
     ) -> Result<(WindowId, Vec<RegistryEvent>), RegistryError> {
+        let stack_index = self.live_count() as i32;
         if let Some(existing) = self.desktop_map.get(&dk).copied() {
             return Err(RegistryError::DesktopKeyAlreadyRegistered { dk, existing });
         }
@@ -102,7 +103,7 @@ impl Registry {
             is_focused: false,
             workspace: None,
             output: None,
-            stack_index: 0,
+            stack_index,
             parent_id: None,
             children: Vec::new(),
             title: None,
@@ -116,12 +117,11 @@ impl Registry {
         self.desktop_map.insert(dk, id);
         self.surface_map.insert(sk, id);
 
-        let events = vec![
-            RegistryEvent::WindowCreated { id, dk, sk },
-        ];
+        let events = vec![RegistryEvent::WindowCreated { id, dk, sk }];
 
         Ok((id, events))
     }
+
     /// Validates that an id is still live and returns a reference.
     pub fn get(&self, id: WindowId) -> Option<&WindowRecord> {
         let slot = self.slots.get(id.index as usize)?;
@@ -151,7 +151,7 @@ impl Registry {
             .filter_map(|s| s.value.as_ref())
             .map(WindowInfo::from)
             .collect()
-    } 
+    }
 
     pub fn from_desktop(&self, dk: DesktopKey) -> Option<WindowId> {
         self.desktop_map.get(&dk).copied()
@@ -162,10 +162,13 @@ impl Registry {
     }
 
     pub fn set_title(&mut self, id: WindowId, title: String) -> bool {
-        let rec = match self.get_mut(id) { Some(r) => r, None => return false };
+        let rec = match self.get_mut(id) {
+            Some(r) => r,
+            None => return false,
+        };
         rec.title = Some(title);
         true
-    } 
+    }
 
     /// Removes the value if the id is valid; invalidates the id thereafter.
     ///
@@ -188,7 +191,9 @@ impl Registry {
         &mut self,
         id: WindowId,
     ) -> Result<(WindowRecord, Vec<RegistryEvent>), RegistryError> {
-        let slot = self.slots.get_mut(id.index as usize)
+        let slot = self
+            .slots
+            .get_mut(id.index as usize)
             .ok_or(RegistryError::InvalidWindowId(id))?;
 
         if slot.gen != id.gen {
@@ -196,6 +201,7 @@ impl Registry {
         }
 
         let record = slot.value.take().ok_or(RegistryError::InvalidWindowId(id))?;
+        let removed_stack_index = record.stack_index;
 
         // Remove reverse lookups
         self.desktop_map.remove(&record.dk);
@@ -204,9 +210,26 @@ impl Registry {
         // Free slot for reuse
         self.free.push(id.index);
 
-        let events = vec![
-            RegistryEvent::WindowDestroyed { id },
-        ];
+        let mut events = Vec::new();
+
+        if removed_stack_index >= 0 {
+            for slot in &mut self.slots {
+                let Some(other) = slot.value.as_mut() else { continue };
+                if other.stack_index > removed_stack_index {
+                    let old = other.stack_index;
+                    other.stack_index -= 1;
+                    events.push(RegistryEvent::WindowChanged {
+                        id: other.id,
+                        changes: WindowChanges {
+                            stack_index: Some(WindowChange { old, new: other.stack_index }),
+                            ..WindowChanges::default()
+                        },
+                    });
+                }
+            }
+        }
+
+        events.push(RegistryEvent::WindowDestroyed { id });
 
         Ok((record, events))
     }
@@ -217,15 +240,13 @@ impl Registry {
         let old = r.lifecycle;
         if old != LifecycleState::Mapped {
             r.lifecycle = LifecycleState::Mapped;
-            Ok(vec![
-                RegistryEvent::WindowChanged {
-                    id,
-                    changes: WindowChanges {
-                        lifecycle: Some(WindowChange { old, new: LifecycleState::Mapped }),
-                        ..WindowChanges::default()
-                    },
+            Ok(vec![RegistryEvent::WindowChanged {
+                id,
+                changes: WindowChanges {
+                    lifecycle: Some(WindowChange { old, new: LifecycleState::Mapped }),
+                    ..WindowChanges::default()
                 },
-            ])
+            }])
         } else {
             Ok(vec![])
         }
@@ -236,18 +257,19 @@ impl Registry {
         let old = r.lifecycle;
         if old == LifecycleState::Mapped {
             r.lifecycle = LifecycleState::Unmapped;
-            Ok(vec![
-                RegistryEvent::WindowChanged {
-                    id,
-                    changes: WindowChanges {
-                        lifecycle: Some(WindowChange { old, new: LifecycleState::Unmapped }),
-                        ..WindowChanges::default()
-                    },
+            Ok(vec![RegistryEvent::WindowChanged {
+                id,
+                changes: WindowChanges {
+                    lifecycle: Some(WindowChange { old, new: LifecycleState::Unmapped }),
+                    ..WindowChanges::default()
                 },
-            ])
+            }])
         } else {
             Ok(vec![])
         }
     }
-}
 
+    pub(crate) fn live_count(&self) -> usize {
+        self.slots.iter().filter(|s| s.value.is_some()).count()
+    }
+}

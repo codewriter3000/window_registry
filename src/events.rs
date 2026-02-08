@@ -30,6 +30,22 @@ pub struct WindowChanges {
     pub app_id: Option<WindowChange<Option<String>>>,
 }
 
+impl WindowChanges {
+    pub fn is_empty(&self) -> bool {
+        self.lifecycle.is_none()
+            && self.geometry.is_none()
+            && self.state.is_none()
+            && self.is_focused.is_none()
+            && self.workspace.is_none()
+            && self.output.is_none()
+            && self.stack_index.is_none()
+            && self.parent_id.is_none()
+            && self.children.is_none()
+            && self.title.is_none()
+            && self.app_id.is_none()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum RegistryEvent {
     WindowCreated {

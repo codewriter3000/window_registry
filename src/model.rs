@@ -92,6 +92,21 @@ pub struct WindowInfo {
     pub app_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct WindowUpdate {
+    pub geometry: Option<Option<WindowGeometry>>,
+    pub state: Option<WindowState>,
+    pub is_focused: Option<bool>,
+    pub workspace: Option<Option<WorkspaceId>>,
+    pub output: Option<Option<OutputId>>,
+    pub stack_index: Option<i32>,
+    pub parent_id: Option<Option<WindowId>>,
+    pub add_children: Vec<WindowId>,
+    pub remove_children: Vec<WindowId>,
+    pub title: Option<Option<String>>,
+    pub app_id: Option<Option<String>>,
+}
+
 impl From<&WindowRecord> for WindowInfo {
     fn from(r: &WindowRecord) -> Self {
         Self {

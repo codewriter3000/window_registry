@@ -20,6 +20,7 @@ pub use model::{
 	WindowInfo,
 	WindowRecord,
 	WindowState,
+	WindowUpdate,
 	WorkspaceId,
 };
 pub use registry::{Slot, Registry};
