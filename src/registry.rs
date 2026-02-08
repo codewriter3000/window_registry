@@ -1,21 +1,19 @@
 use std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
     num::NonZeroU32, 
-    ptr::NonNull,
     collections::HashMap,
     fmt::Debug,
 };
 
 use crate::{
+    RegistryEvent,
+    RegistryError,
+    LifecycleState,
     WindowRecord,
     WindowId,
     WindowInfo,
     DesktopKey,
     SurfaceKey,
-    weston_desktop_surface,
-    weston_desktop_surface_get_surface,
-    weston_surface,
-    weston_view,
 };
 
 #[derive(Debug)]
@@ -29,7 +27,6 @@ pub struct Registry {
     slots: Vec<Slot>,
     free: Vec<u32>,
 
-    // Deliverable B
     pub surface_map: HashMap<SurfaceKey, WindowId>,
     pub desktop_map: HashMap<DesktopKey, WindowId>,
 }
@@ -74,30 +71,32 @@ impl Registry {
         id
     }
 
-    /// Inserts a window record AND ALSO registers reverse lookup keys.
-    /// This is the libweston-aware insertion helper.
+    /// Deliverable C: libweston-aware insertion helper with invariant checks.
     ///
-    /// Invariant: a DesktopKey/SurfaceKey must not already be registered.
-    pub fn insert_window(&mut self, dk: DesktopKey, sk: SurfaceKey) -> WindowId {
-        debug_assert!(
-            !self.desktop_map.contains_key(&dk),
-            "DesktopKey already registered"
-        );
-        debug_assert!(
-            !self.surface_map.contains_key(&sk),
-            "SurfaceKey already registered"
-        );
+    /// Returns:
+    /// - Ok((id, events)) on success
+    /// - Err(RegistryError::...) if dk/sk are already registered
+    pub fn insert_window(
+        &mut self,
+        dk: DesktopKey,
+        sk: SurfaceKey,
+    ) -> Result<(WindowId, Vec<RegistryEvent>), RegistryError> {
+        if let Some(existing) = self.desktop_map.get(&dk).copied() {
+            return Err(RegistryError::DesktopKeyAlreadyRegistered { dk, existing });
+        }
+        if let Some(existing) = self.surface_map.get(&sk).copied() {
+            return Err(RegistryError::SurfaceKeyAlreadyRegistered { sk, existing });
+        }
 
         let id = self.alloc_id();
 
-        // NOTE: RECORD MUST STATE ONLY THREAD-SAFE FIELDS
         let record = WindowRecord {
             id,
             dk,
             sk,
+            lifecycle: LifecycleState::Created,
             title: None,
             app_id: None,
-            // lifecycle/state/geometry later
         };
 
         let slot = &mut self.slots[id.index as usize];
@@ -107,9 +106,12 @@ impl Registry {
         self.desktop_map.insert(dk, id);
         self.surface_map.insert(sk, id);
 
-        id
-    }
+        let events = vec![
+            RegistryEvent::WindowCreated { id, dk, sk },
+        ];
 
+        Ok((id, events))
+    }
     /// Validates that an id is still live and returns a reference.
     pub fn get(&self, id: WindowId) -> Option<&WindowRecord> {
         let slot = self.slots.get(id.index as usize)?;
@@ -172,56 +174,59 @@ impl Registry {
         out
     }
 
-    pub fn remove_window(&mut self, id: WindowId) -> Option<WindowRecord> {
-        // validate id + take record
-        let slot = self.slots.get_mut(id.index as usize)?;
+    pub fn remove_window(
+        &mut self,
+        id: WindowId,
+    ) -> Result<(WindowRecord, Vec<RegistryEvent>), RegistryError> {
+        let slot = self.slots.get_mut(id.index as usize)
+            .ok_or(RegistryError::InvalidWindowId(id))?;
+
         if slot.gen != id.gen {
-            return None;
+            return Err(RegistryError::InvalidWindowId(id));
         }
 
-        let record = slot.value.take()?;
+        let record = slot.value.take().ok_or(RegistryError::InvalidWindowId(id))?;
 
-        // remove reverse lookups
+        // Remove reverse lookups
         self.desktop_map.remove(&record.dk);
         self.surface_map.remove(&record.sk);
 
-        // free slot index for reuse
+        // Free slot for reuse
         self.free.push(id.index);
 
-        Some(record)
-    }
-}
+        let events = vec![
+            RegistryEvent::WindowDestroyed { id },
+        ];
 
-#[derive(Clone)]
-pub struct SharedRegistry {
-    inner: Arc<RwLock<Registry>>,
-}
-
-impl SharedRegistry {
-    pub fn new(reg: Registry) -> Self {
-        Self { inner: Arc::new(RwLock::new(reg)) }
+        Ok((record, events))
     }
 
-    pub fn read(&self) -> RwLockReadGuard<'_, Registry> {
-        self.inner.read().expect("registry poisoned")
+    // Optional: lifecycle transitions (C-level completeness)
+    pub fn on_map(&mut self, id: WindowId) -> Result<Vec<RegistryEvent>, RegistryError> {
+        let r = self.get_mut(id).ok_or(RegistryError::InvalidWindowId(id))?;
+        let old = r.lifecycle;
+        if old != LifecycleState::Mapped {
+            r.lifecycle = LifecycleState::Mapped;
+            Ok(vec![
+                RegistryEvent::LifecycleChanged { id, old, new: LifecycleState::Mapped },
+                RegistryEvent::WindowMapped { id },
+            ])
+        } else {
+            Ok(vec![])
+        }
     }
 
-    pub fn write(&self) -> RwLockWriteGuard<'_, Registry> {
-        self.inner.write().expect("registry poisoned")
-    }
-
-    // ergonomic snapshot helpers (encourage short lock holds)
-    pub fn snapshot(&self, id: WindowId) -> Option<WindowInfo> {
-        self.read().snapshot(id)
-    }
-
-    pub fn snapshot_all(&self) -> Vec<WindowInfo> {
-        self.read().snapshot_all()
-    }
-
-    // write helper that returns results without leaking guards
-    pub fn insert_window(&self, dk: DesktopKey, sk: SurfaceKey) -> WindowId {
-        let mut reg = self.write();
-        reg.insert_window(dk, sk)
+    pub fn on_unmap(&mut self, id: WindowId) -> Result<Vec<RegistryEvent>, RegistryError> {
+        let r = self.get_mut(id).ok_or(RegistryError::InvalidWindowId(id))?;
+        let old = r.lifecycle;
+        if old == LifecycleState::Mapped {
+            r.lifecycle = LifecycleState::Unmapped;
+            Ok(vec![
+                RegistryEvent::LifecycleChanged { id, old, new: LifecycleState::Unmapped },
+                RegistryEvent::WindowUnmapped { id },
+            ])
+        } else {
+            Ok(vec![])
+        }
     }
 }
