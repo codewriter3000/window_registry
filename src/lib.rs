@@ -8,6 +8,7 @@ mod registry;
 mod events;
 mod error;
 mod shared;
+mod event_queue;
 mod handles;
 mod weston;
 
@@ -27,5 +28,6 @@ pub use registry::{Slot, Registry};
 pub use events::{RegistryEvent, WindowChange, WindowChanges};
 pub use error::RegistryError;
 pub use shared::SharedRegistry;
+pub use event_queue::{RegistryEventQueue, RegistryEventReceiver};
 pub use handles::CompositorHandles;
 pub use weston::on_new_desktop_surface;

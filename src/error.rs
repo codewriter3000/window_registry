@@ -24,5 +24,7 @@ pub enum RegistryError {
     ChildAlreadyHasParent { id: WindowId, child: WindowId, existing_parent: WindowId },
     ChildAlreadyPresent { id: WindowId, child: WindowId },
     StackIndexOutOfBounds { id: WindowId, index: i32, count: usize },
+    EventQueueClosed,
+    EventQueueTimeout,
 }
 

@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::{
     Registry, RegistryEvent, RegistryError,
-    WindowId, WindowInfo, DesktopKey, SurfaceKey, WindowUpdate,
+    DesktopKey, RegistryEventQueue, SurfaceKey, WindowId, WindowInfo, WindowUpdate,
 };
 
 #[derive(Clone, Debug)]
@@ -104,6 +104,79 @@ impl SharedRegistry {
         };
 
         dispatch(events);
+        Ok(())
+    }
+
+    pub fn insert_window_queued(
+        &self,
+        dk: DesktopKey,
+        sk: SurfaceKey,
+        queue: &RegistryEventQueue,
+    ) -> Result<WindowId, RegistryError> {
+        let (id, events) = {
+            let mut r = self.inner.write().expect("registry lock poisoned");
+            r.insert_window(dk, sk)?
+        };
+
+        queue.send(events)?;
+        Ok(id)
+    }
+
+    pub fn remove_window_queued(
+        &self,
+        id: WindowId,
+        queue: &RegistryEventQueue,
+    ) -> Result<(), RegistryError> {
+        let events = {
+            let mut r = self.inner.write().expect("registry lock poisoned");
+            let (_record, events) = r.remove_window(id)?;
+            events
+        };
+
+        queue.send(events)?;
+        Ok(())
+    }
+
+    pub fn on_map_queued(
+        &self,
+        id: WindowId,
+        queue: &RegistryEventQueue,
+    ) -> Result<(), RegistryError> {
+        let events = {
+            let mut r = self.inner.write().expect("registry lock poisoned");
+            r.on_map(id)?
+        };
+
+        queue.send(events)?;
+        Ok(())
+    }
+
+    pub fn on_unmap_queued(
+        &self,
+        id: WindowId,
+        queue: &RegistryEventQueue,
+    ) -> Result<(), RegistryError> {
+        let events = {
+            let mut r = self.inner.write().expect("registry lock poisoned");
+            r.on_unmap(id)?
+        };
+
+        queue.send(events)?;
+        Ok(())
+    }
+
+    pub fn update_window_queued(
+        &self,
+        id: WindowId,
+        update: WindowUpdate,
+        queue: &RegistryEventQueue,
+    ) -> Result<(), RegistryError> {
+        let events = {
+            let mut r = self.inner.write().expect("registry lock poisoned");
+            r.update_window(id, update)?
+        };
+
+        queue.send(events)?;
         Ok(())
     }
 
