@@ -1,7 +1,6 @@
 use std::{
     num::NonZeroU32, 
     hash::{Hash, Hasher},
-    ptr::NonNull,
     fmt::{Debug, Formatter, Result},
 };
 
@@ -17,67 +16,54 @@ pub struct WindowId {
 }
 
 #[repr(transparent)]
-#[derive(Copy, Clone)]
-pub struct DesktopKey(NonNull<weston_desktop_surface>);
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub struct DesktopKey(usize);
 
 impl DesktopKey {
     pub unsafe fn from_ptr(ptr: *mut weston_desktop_surface) -> Self {
-        Self(NonNull::new(ptr).expect("desktop_surface ptr was null"))
+        Self(ptr as usize)
     }
 
     pub fn as_ptr(self) -> *mut weston_desktop_surface {
-        self.0.as_ptr()
+        self.0 as *mut weston_desktop_surface
     }
 }
-
-impl PartialEq for DesktopKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-impl Eq for DesktopKey {}
 
 impl Hash for DesktopKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        (self.0.as_ptr() as usize).hash(state);
+        self.0.hash(state);
     }
 }
 
 impl Debug for DesktopKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "DesktopKey({:p})", self.0.as_ptr())
+        write!(f, "DesktopKey({:#x})", self.0)
     }
 }
 
 #[repr(transparent)]
-#[derive(Copy, Clone)]
-pub struct SurfaceKey(NonNull<weston_surface>);
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub struct SurfaceKey(usize);
 
 impl SurfaceKey {
     pub unsafe fn from_ptr(ptr: *mut weston_surface) -> Self {
-        Self(NonNull::new(ptr).expect("weston_surface ptr was null"))
+        Self(ptr as usize)
     }
 
     pub fn as_ptr(self) -> *mut weston_surface {
-        self.0.as_ptr()
+        self.0 as *mut weston_surface
     }
 }
-
-impl PartialEq for SurfaceKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-impl Eq for SurfaceKey {}
 
 impl Hash for SurfaceKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        (self.0.as_ptr() as usize).hash(state);
+        self.0.hash(state);
     }
 }
 
 impl Debug for SurfaceKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "SurfaceKey({:p})", self.0.as_ptr())
+        write!(f, "SurfaceKey({:#x})", self.0)
     }
 }
+

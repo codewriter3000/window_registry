@@ -1,4 +1,5 @@
 use std::{
+    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
     num::NonZeroU32, 
     ptr::NonNull,
     collections::HashMap,
@@ -8,6 +9,7 @@ use std::{
 use crate::{
     WindowRecord,
     WindowId,
+    WindowInfo,
     DesktopKey,
     SurfaceKey,
     weston_desktop_surface,
@@ -76,7 +78,7 @@ impl Registry {
     /// This is the libweston-aware insertion helper.
     ///
     /// Invariant: a DesktopKey/SurfaceKey must not already be registered.
-    pub fn insert_window(&mut self, dk: DesktopKey, sk: SurfaceKey, view: Option<NonNull<weston_view>>) -> WindowId {
+    pub fn insert_window(&mut self, dk: DesktopKey, sk: SurfaceKey) -> WindowId {
         debug_assert!(
             !self.desktop_map.contains_key(&dk),
             "DesktopKey already registered"
@@ -87,7 +89,16 @@ impl Registry {
         );
 
         let id = self.alloc_id();
-        let record = WindowRecord { id, dk, sk, view };
+
+        // NOTE: RECORD MUST STATE ONLY THREAD-SAFE FIELDS
+        let record = WindowRecord {
+            id,
+            dk,
+            sk,
+            title: None,
+            app_id: None,
+            // lifecycle/state/geometry later
+        };
 
         let slot = &mut self.slots[id.index as usize];
         debug_assert!(slot.value.is_none());
@@ -118,6 +129,18 @@ impl Registry {
         }
     }
 
+    pub fn snapshot(&self, id: WindowId) -> Option<WindowInfo> {
+        self.get(id).map(WindowInfo::from)
+    }
+
+    pub fn snapshot_all(&self) -> Vec<WindowInfo> {
+        self.slots
+            .iter()
+            .filter_map(|s| s.value.as_ref())
+            .map(WindowInfo::from)
+            .collect()
+    } 
+
     pub fn from_desktop(&self, dk: DesktopKey) -> Option<WindowId> {
         self.desktop_map.get(&dk).copied()
     }
@@ -125,6 +148,12 @@ impl Registry {
     pub fn from_surface(&self, sk: SurfaceKey) -> Option<WindowId> {
         self.surface_map.get(&sk).copied()
     }
+
+    pub fn set_title(&mut self, id: WindowId, title: String) -> bool {
+        let rec = match self.get_mut(id) { Some(r) => r, None => return false };
+        rec.title = Some(title);
+        true
+    } 
 
     /// Removes the value if the id is valid; invalidates the id thereafter.
     ///
@@ -163,16 +192,36 @@ impl Registry {
     }
 }
 
-/// The exact function names depend on the Weston version
-pub unsafe fn on_new_desktop_surface(ds: *mut weston_desktop_surface, reg: &mut Registry) {
-    let dk = DesktopKey::from_ptr(ds);
+#[derive(Clone)]
+pub struct SharedRegistry {
+    inner: Arc<RwLock<Registry>>,
+}
 
-    // you likely extract weston_surface* from the desktop surface via libweston-desktop API:
-    let s: *mut weston_surface = weston_desktop_surface_get_surface(ds);
-    let sk = SurfaceKey::from_ptr(s);
+impl SharedRegistry {
+    pub fn new(reg: Registry) -> Self {
+        Self { inner: Arc::new(RwLock::new(reg)) }
+    }
 
-    let id = reg.insert_window(dk, sk, None);
-    
-    // log
-    eprintln!("New window: {:?}", id);
+    pub fn read(&self) -> RwLockReadGuard<'_, Registry> {
+        self.inner.read().expect("registry poisoned")
+    }
+
+    pub fn write(&self) -> RwLockWriteGuard<'_, Registry> {
+        self.inner.write().expect("registry poisoned")
+    }
+
+    // ergonomic snapshot helpers (encourage short lock holds)
+    pub fn snapshot(&self, id: WindowId) -> Option<WindowInfo> {
+        self.read().snapshot(id)
+    }
+
+    pub fn snapshot_all(&self) -> Vec<WindowInfo> {
+        self.read().snapshot_all()
+    }
+
+    // write helper that returns results without leaking guards
+    pub fn insert_window(&self, dk: DesktopKey, sk: SurfaceKey) -> WindowId {
+        let mut reg = self.write();
+        reg.insert_window(dk, sk)
+    }
 }

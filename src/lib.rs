@@ -8,5 +8,5 @@ mod registry;
 
 // Public re-exports
 pub use ids::{WindowId, DesktopKey, SurfaceKey};
-pub use model::{WindowRecord};
-pub use registry::{Slot, Registry, on_new_desktop_surface};
+pub use model::{WindowRecord, WindowInfo};
+pub use registry::{Slot, Registry};
