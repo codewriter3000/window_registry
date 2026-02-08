@@ -1,8 +1,43 @@
 use std::collections::{HashMap, HashSet};
 
-use window_registry::{SharedRegistry, WindowId, DesktopKey, SurfaceKey, LifecycleState};
+use window_registry::{
+    DesktopKey,
+    LifecycleState,
+    SharedRegistry,
+    SurfaceKey,
+    WindowId,
+    weston_desktop_surface,
+    weston_surface,
+};
+
+pub struct TestPtrs {
+    pub ds: *mut weston_desktop_surface,
+    pub s: *mut weston_surface,
+}
+
+impl TestPtrs {
+    pub fn new() -> Self {
+        let ds = Box::into_raw(Box::new(0u8)) as *mut weston_desktop_surface;
+        let s = Box::into_raw(Box::new(0u8)) as *mut weston_surface;
+        Self { ds, s }
+    }
+
+    pub unsafe fn keys(&self) -> (DesktopKey, SurfaceKey) {
+        (DesktopKey::from_ptr(self.ds), SurfaceKey::from_ptr(self.s))
+    }
+}
+
+impl Drop for TestPtrs {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Box::from_raw(self.ds));
+            drop(Box::from_raw(self.s));
+        }
+    }
+}
 
 /// Invariants that should hold no matter what your higher-level policy is.
+#[allow(dead_code)]
 pub fn assert_shared_registry_hard_invariants(reg: &SharedRegistry) {
     let all = reg.snapshot_all();
 
@@ -47,6 +82,7 @@ pub fn assert_shared_registry_hard_invariants(reg: &SharedRegistry) {
 /// Optional invariants: enable these only if your model requires uniqueness of pointers.
 ///
 /// Many window registries enforce: one (dk, sk) pair == one window.
+#[allow(dead_code)]
 pub fn assert_shared_registry_pointer_uniqueness(reg: &SharedRegistry) {
     let all = reg.snapshot_all();
 
@@ -84,6 +120,7 @@ pub fn assert_shared_registry_pointer_uniqueness(reg: &SharedRegistry) {
     }
 }
 
+#[allow(dead_code)]
 pub fn assert_shared_registry_invariants(reg: &SharedRegistry) {
     assert_shared_registry_hard_invariants(&reg);
     assert_shared_registry_pointer_uniqueness(&reg);

@@ -6,7 +6,6 @@ use crate::{
     WindowId,
     DesktopKey,
     SurfaceKey,
-    weston_view,
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

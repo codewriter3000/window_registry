@@ -15,6 +15,13 @@ pub struct WindowId {
     pub(crate) gen: NonZeroU32,
 }
 
+impl WindowId {
+    #[cfg(any(feature = "test-utils", feature = "test-access"))]
+    pub fn new_for_test(index: u32, gen: NonZeroU32) -> Self {
+        Self { index, gen }
+    }
+}
+
 #[repr(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct DesktopKey(usize);

@@ -62,5 +62,40 @@ impl SharedRegistry {
         dispatch(events);
         Ok(())
     }
-}
 
+    pub fn on_map_with<F>(&self, id: WindowId, mut dispatch: F) -> Result<(), RegistryError>
+    where
+        F: FnMut(Vec<RegistryEvent>),
+    {
+        let events = {
+            let mut r = self.inner.write().expect("registry lock poisoned");
+            r.on_map(id)?
+        };
+
+        dispatch(events);
+        Ok(())
+    }
+
+    pub fn on_unmap_with<F>(&self, id: WindowId, mut dispatch: F) -> Result<(), RegistryError>
+    where
+        F: FnMut(Vec<RegistryEvent>),
+    {
+        let events = {
+            let mut r = self.inner.write().expect("registry lock poisoned");
+            r.on_unmap(id)?
+        };
+
+        dispatch(events);
+        Ok(())
+    }
+
+    #[cfg(any(feature = "test-utils", feature = "test-access"))]
+    pub fn poison_for_test(&self) {
+        let reg_clone = self.clone();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let _guard = reg_clone.inner.write().unwrap();
+            panic!("poison");
+        }));
+        assert!(result.is_err());
+    }
+}
